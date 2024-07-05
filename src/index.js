@@ -1,11 +1,13 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
-const path = require("node:path");
-const XLSX = require("xlsx");
-const writeXlsxFile = require("write-excel-file/node");
+const { app, BrowserWindow, ipcMain } = require('electron');
+const path = require('node:path');
+const XLSX = require('xlsx');
+const writeXlsxFile = require('write-excel-file/node');
+const { isContext } = require('node:vm');
 const fs = require('fs');
-if (require("electron-squirrel-startup")) {
+if (require('electron-squirrel-startup')) {
   app.quit();
 }
+
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -13,7 +15,7 @@ const createWindow = () => {
     // width: 1290,
     // height: 1080,
     icon: path.join(__dirname, './assets/NimarMotor.png'),
-    autoHideMenuBar: true,
+    // autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: true,
@@ -26,30 +28,45 @@ const createWindow = () => {
   mainWindow.once('ready-to-show', () => {
     mainWindow.maximize()
   })
+
+  ipcMain.on('reset-app', () => {
+    if (mainWindow) {
+      mainWindow.reload();
+    }
+  });
+
   mainWindow.loadFile(path.join(__dirname, "index.html"));
   // mainWindow.webContents.openDevTools();
 };
 
+//Separate Calculation Functions
+const MGAfunc = require('./functions/MGACalculation');
+const CDIfunc = require('./functions/CDICalculation');
+const EWfunc = require('./functions/EWCalculation');
+const CCPfunc = require('./functions/CCPCalculation');
+const MSSFfunc = require('./functions/MSSFCalculation');
+const DiscountFunc = require('./functions/DiscountCalculation')
+const ExchangeFunc = require('./functions/ExchangeStatusCalculation')
+const ComplaintFunc = require('./functions/ComplaintCalculation');
+const PerModelCarFunc = require('./functions/PerModelCalculation');
+const SpecialCarFunc = require('./functions/SpecialCarCalculation');
+const PerCarFunc = require('./functions/PerCarCalculation');
+const MSRFunc = require('./functions/MSRCalculation');
+const SuperCarFunc = require('./functions/SuperCarCalculation');
+const NewDSEincentiveCalculation = require('./functions/NewDSEincentiveCalculation');
 
-let data1 = [];
-let data2 = [];
-let dataForExcelObj = [];
-let dat1;
-let dat2;
-let cMap;
+// Global Variables
+let MGAdata = [];
+let CDIdata = [];
+let salesExcelDataSheet = [];
+let employeeStatusDataSheet = [];
+let qualifiedRM = [];
+let nonQualifiedRM = [];
+let newRm = [];
+let newDSEIncentiveDataSheet = [];
 let KeyMissing = false;
 
-
-//changes start
-let interestPercent = 0;
-let noDueDays = 0;
-let EndDate = 0;
-let copyInterestPercent = 0;
-let copyNoDueDays = 0;
-let copyEndDate = 0;
-let customerIdVal = '';
-
-
+//////////////////////////////////////////////////////
 function checkKeys(array, keys) {
   const firstObject = array[0];
   const missingKeys = [];
@@ -61,6 +78,20 @@ function checkKeys(array, keys) {
   }
   return missingKeys.length > 0 ? missingKeys : null;
 }
+
+function transformKeys(array) {
+  return array.map(obj => {
+    let newObj = {};
+    for (let key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        let newKey = key.trim();
+        newObj[newKey] = obj[key];
+      }
+    }
+    return newObj;
+  });
+}
+
 
 
 function trimValuesArray(arr) {
@@ -77,541 +108,481 @@ function trimValuesArray(arr) {
   });
 }
 
+//////////////////////////////////////////////////
+const checkQualifingCondition = (formData, employeeStatusDataSheet) => {
+  // console.log("checkQualifingCondition");
+  salesExcelDataSheet.forEach((item) => {
+    let numberCheck = 0;
+    let Discount = 0;
+    let ComplaintCheck = 0;
+    let EWCheck = 0;
+    let EWPCheck = 0;
+    let ExchangeStatusCheck = 0;
+    let TotalNumberCheck = 0;
+    let CCPcheck = 0;
+    let MSSFcheck = 0;
+    let autoCardCheck = 0;
+    let obj = {};
+    let MSRcheck = 0;
 
-function transformKeys(array) {
-  return array.map(obj => {
-    let newObj = {};
-    for (let key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        let newKey = key.trim();
-        newObj[newKey] = obj[key];
-      }
+    let carObj = {
+      "ALTO": 0,
+      "ALTO K-10": 0,
+      "S-Presso": 0,
+      "CELERIO": 0,
+      "WagonR": 0,
+      "BREZZA": 0,
+      "DZIRE": 0,
+      "EECO": 0,
+      "Ertiga": 0,
+      "SWIFT": 0
     }
-    return newObj;
-  });
-}
 
-
-function calculateDaysBetween(startDate, EndDate) {
-  const start = new Date(startDate);
-  const end = new Date(EndDate);
-  const diffTime = Math.abs(end - start);
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-}
-
-
-function interestAmount(dueAmt, dueDays) {
-  return (dueDays * (((dueAmt) * interestPercent) / 365));
-}
-
-function applyPaymentsAndCalculateInterest(datt1, datt2) {
-
-  // cMap = datt1.reduce((acc, purchase) => {
-  //   if(EndDate >  purchase['Date']){
-  //     if (!acc[purchase['Customer Code']]) acc[purchase['Customer Code']] = [];
-  //     acc[purchase['Customer Code']].push({ ...purchase, RemainingChallanAmount: purchase['Total Amount'], LastPaymentDate: 0, interest: 0 });
-  //     return acc;
-  //   }
-  // }, {});
-
-  if (customerIdVal !== '') {
-    cMap = datt1.reduce((acc, purchase) => {
-
-      // let trimmedWord = purchase.Date.trim();
-      const parsedPurchaseDate = XLSX.SSF.parse_date_code(purchase.Date);
-      // const parsedPurchaseDate = XLSX.SSF.parse_date_code(trimmedWord);
-
-      const jsPurchaseDate = new Date(parsedPurchaseDate.y, parsedPurchaseDate.m - 1, parsedPurchaseDate.d);
-      if (jsPurchaseDate < new Date(EndDate)) {
-        if (purchase['Customer Name'].includes(customerIdVal) || purchase['Customer Code'].includes(customerIdVal)) {
-          acc[customerIdVal] = acc[customerIdVal] || [];
-          acc[customerIdVal].push({
-            ...purchase,
-            RemainingChallanAmount: purchase['Total'],
-            LastPaymentDate: 0,
-            interest: 0
-          });
-        }
+    const DSE_NoOfSoldCarExcelDataArr = Object.values(item)[0];
+    // check OLD / NEW DSE
+    let empStatus = true;
+    // console.log(employeeStatusDataSheet)
+    employeeStatusDataSheet.forEach(employee => {
+      if (employee["DSE ID"] == DSE_NoOfSoldCarExcelDataArr[0]['DSE ID']) {
+        if (employee["STATUS"] === "NEW")
+          empStatus = false;
       }
-      return acc;
-    }, {});
-  } else {
-    cMap = datt1.reduce((acc, purchase) => {
-      const parsedPurchaseDate = XLSX.SSF.parse_date_code(purchase.Date);
-      const jsPurchaseDate = new Date(parsedPurchaseDate.y, parsedPurchaseDate.m - 1, parsedPurchaseDate.d);
-      if (jsPurchaseDate < new Date(EndDate)) {
-        if (!acc[purchase['Customer Code']]) acc[purchase['Customer Code']] = [];
-        acc[purchase['Customer Code']].push({
-          ...purchase,
-          RemainingChallanAmount: purchase['Total'],
-          LastPaymentDate: 0,
-          interest: 0
-        });
-      }
-      return acc;
-    }, {});
-  }
-
-
-
-
-  datt2.forEach(payment => {
-    if (cMap[payment['Customer Code']]) {
-
-      let RemainingChallanAmountPayment = payment['Total Amount'];
-
-      for (const purchase of cMap[payment['Customer Code']]) {
-
-        if (RemainingChallanAmountPayment === 0) break;
-
-        if (purchase.RemainingChallanAmount > 0) {
-
-          const parsedDate1 = XLSX.SSF.parse_date_code(purchase.Date);
-          const jsDate1 = new Date(parsedDate1.y, parsedDate1.m - 1, parsedDate1.d, parsedDate1.H, parsedDate1.M, parsedDate1.S);
-          const parsedDate2 = XLSX.SSF.parse_date_code(payment.Date);
-          const jsDate2 = new Date(parsedDate2.y, parsedDate2.m - 1, parsedDate2.d, parsedDate2.H, parsedDate2.M, parsedDate2.S);
-          let dueDays = 0;
-          const daysPastDue = calculateDaysBetween(jsDate1, jsDate2);
-
-          console.log("Check", daysPastDue);
-          purchase["Customer Code"]
-
-          if (purchase.LastPaymentDate !== 0) {
-            const parsedDate3 = XLSX.SSF.parse_date_code(purchase.LastPaymentDate);
-            const jsDate3 = new Date(parsedDate3.y, parsedDate3.m - 1, parsedDate3.d, parsedDate3.H, parsedDate3.M, parsedDate3.S);
-            dueDays = calculateDaysBetween(jsDate3, jsDate2);
-
-            lastPaymentCheck = calculateDaysBetween(jsDate1, jsDate3);
-          }
-
-          if (parseInt(payment.Date) < parseInt(purchase.Date)) {
-
-            const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-            purchase.RemainingChallanAmount -= deduction;
-            RemainingChallanAmountPayment -= deduction;
-            purchase.LastPaymentDate = payment.Date;
-          } else {
-            //normal deduction with no interest charges
-            if (daysPastDue < parseInt(noDueDays)) {
-              const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-              purchase.RemainingChallanAmount -= deduction;
-              RemainingChallanAmountPayment -= deduction;
-              purchase.LastPaymentDate = payment.Date;
-            } else //deduction with interest charges
-            {
-              if (daysPastDue <= (parseInt(noDueDays) * 2)) {
-                if (purchase.LastPaymentDate === 0) {
-                  const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                  purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                  console.log(purchase.interest);
-                  purchase.RemainingChallanAmount -= deduction;
-                  RemainingChallanAmountPayment -= deduction;
-                  purchase.LastPaymentDate = payment.Date;
-                } else {
-                  if (parseInt(purchase.Date) > parseInt(purchase.LastPaymentDate)) {
-                    const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                    purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                    console.log(purchase.interest);
-                    purchase.RemainingChallanAmount -= deduction;
-                    RemainingChallanAmountPayment -= deduction;
-                    purchase.LastPaymentDate = payment.Date;
-                  } else {
-
-
-                    // adding a if case here  
-                    if (parseInt(lastPaymentCheck) <= noDueDays) {
-
-
-                      // adding if else inside 
-
-                      if (daysPastDue == noDueDays) {
-
-                        const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                        purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue + 1 - parseInt(noDueDays));
-                        console.log(purchase.interest);
-
-                        purchase.RemainingChallanAmount -= deduction;
-                        RemainingChallanAmountPayment -= deduction;
-                        purchase.LastPaymentDate = payment.Date;
-
-                      } else {
-
-
-                        const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                        purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                        console.log(purchase.interest);
-
-                        purchase.RemainingChallanAmount -= deduction;
-                        RemainingChallanAmountPayment -= deduction;
-                        purchase.LastPaymentDate = payment.Date;
-
-                      }
-
-                      // const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);               
-                      // purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue + 1 - parseInt(noDueDays));
-                      // console.log(purchase.interest);
-
-                      // purchase.RemainingChallanAmount -= deduction;
-                      // RemainingChallanAmountPayment -= deduction;
-                      // purchase.LastPaymentDate = payment.Date;
-
-
-                    } else {
-                      const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                      purchase.interest += interestAmount(purchase.RemainingChallanAmount, dueDays);
-                      console.log(purchase.interest);
-
-                      purchase.RemainingChallanAmount -= deduction;
-                      RemainingChallanAmountPayment -= deduction;
-                      purchase.LastPaymentDate = payment.Date;
-
-                    }
-
-
-
-
-                    // const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                    // purchase.interest += interestAmount(purchase.RemainingChallanAmount, dueDays);
-                    // // purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                    // purchase.RemainingChallanAmount -= deduction;
-                    // RemainingChallanAmountPayment -= deduction;
-                    // purchase.LastPaymentDate = payment.Date;
-                  }
-                }
-              } else {
-                // calculate interest from last payment date;
-                //deduct amount and set lastpayment date
-                if (purchase.LastPaymentDate === 0) {
-                  const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                  purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                  console.log(purchase.interest);
-
-                  purchase.RemainingChallanAmount -= deduction;
-                  RemainingChallanAmountPayment -= deduction;
-                  purchase.LastPaymentDate = payment.Date;
-                } else {
-
-
-                  if (parseInt(purchase.LastPaymentDate) < parseInt(purchase.Date)) {
-                    const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                    purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                    console.log(purchase.interest);
-
-                    purchase.RemainingChallanAmount -= deduction;
-                    RemainingChallanAmountPayment -= deduction;
-                    purchase.LastPaymentDate = payment.Date;
-                  } else {
-
-                    // Edge Case
-
-                    if (parseInt(lastPaymentCheck) <= noDueDays) {
-
-
-
-                      // const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-
-                      // purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                      // console.log(purchase.interest);
-
-                      // purchase.RemainingChallanAmount -= deduction;
-                      // RemainingChallanAmountPayment -= deduction;
-                      // purchase.LastPaymentDate = payment.Date;
-
-
-                      if (lastPaymentCheck == noDueDays) {
-
-                        const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                        purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - 1 - parseInt(noDueDays));
-                        console.log(purchase.interest);
-
-                        purchase.RemainingChallanAmount -= deduction;
-                        RemainingChallanAmountPayment -= deduction;
-                        purchase.LastPaymentDate = payment.Date;
-
-                      } else {
-
-
-                        const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                        purchase.interest += interestAmount(purchase.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                        console.log(purchase.interest);
-
-                        purchase.RemainingChallanAmount -= deduction;
-                        RemainingChallanAmountPayment -= deduction;
-                        purchase.LastPaymentDate = payment.Date;
-
-                      }
-
-
-
-                    } else {
-
-
-                      const deduction = Math.min(purchase.RemainingChallanAmount, RemainingChallanAmountPayment);
-                      // console.log("last call",dueDays)
-                      purchase.interest += interestAmount(purchase.RemainingChallanAmount, dueDays);
-                      console.log(purchase.interest);
-
-                      purchase.RemainingChallanAmount -= deduction;
-                      RemainingChallanAmountPayment -= deduction;
-                      purchase.LastPaymentDate = payment.Date;
-
-
-
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+    });
+
+    obj = {
+      "DSE ID": DSE_NoOfSoldCarExcelDataArr[0]['DSE ID'],
+      "DSE Name": DSE_NoOfSoldCarExcelDataArr[0]['DSE Name'],
+      "BM AND TL NAME": DSE_NoOfSoldCarExcelDataArr[0]['BM AND TL NAME'],
+      "Status": "OLD",
+      "Focus Model Qualification": "No",
+      ...carObj,
+      "Grand Total": 0,
+      "Vehicle Incentive ": 0,
+      "Special Car Incentive": 0,
+      "Total Vehicle Incentive": 0,
+      "Super Car Incentive Qualification": 0,
+      "Super Car Incentive": 0,
+      "CDI Score": 0,
+      "CDI Incentive": 0,
+      "Extended Warranty Penetration": 0,
+      "Extended Warranty Incentive": 0,
+      "CCP Score": 0,
+      "CCP Incentive": 0,
+      "MSSF Score": 0,
+      "MSSF Incentive": 0,
+      "MSR Score": 0,
+      "MSR Incentive": 0,
+      "Total Discount": 0,
+      "Discount Incentive": 0,
+      "Exchange Incentive": 0,
+      "Complaint Deduction": 0,
+      "MGA/Vehicle": 0,
+      "MGA Incentive": 0,
+      "Final Incentive": 0,
     }
-  })
-  // console.log("cMap::", cMap)
+    if (empStatus) {
+      DSE_NoOfSoldCarExcelDataArr.forEach((sold) => {
 
-
-  //calculation for End Date
-  let ids = Object.keys(cMap);
-  ids.forEach(id => {
-    cMap[id].forEach(obj => {
-      if (obj.RemainingChallanAmount > 0) {
-        // console.log("Customer Code:::", obj["Customer Code"]);
-        // console.log("Date:::", obj["Date"]);
-
-        const parsedDate1 = XLSX.SSF.parse_date_code(obj.Date);
-        // console.log("parsedDate1:::", parsedDate1);
-
-        const jsDate1 = new Date(parsedDate1.y, parsedDate1.m - 1, parsedDate1.d, parsedDate1.H, parsedDate1.M, parsedDate1.S);
-        // console.log("jsDate1:::", jsDate1);
-
-        let dueDays = 0;
-        let daysPastDue = calculateDaysBetween(jsDate1, EndDate);
-        let RangeCheck = 0;
-        // console.log("daysPastDue:::", daysPastDue);
-
-        if (obj.LastPaymentDate !== 0) {
-          const parsedDate3 = XLSX.SSF.parse_date_code(obj.LastPaymentDate);
-          const jsDate3 = new Date(parsedDate3.y, parsedDate3.m - 1, parsedDate3.d, parsedDate3.H, parsedDate3.M, parsedDate3.S);
-          dueDays = calculateDaysBetween(jsDate3, EndDate);
-          RangeCheck = calculateDaysBetween(jsDate1, jsDate3);
-          // console.log("last end due days", dueDays);
+        Discount = Discount + parseInt(sold["FINAL DISCOUNT"]);
+        carObj[sold["Model Name"]]++;
+        if (DSE_NoOfSoldCarExcelDataArr[0]['DSE ID'] === "BAD018") {
+          console.log(`carObj[sold["Model Name"]]::::`)
+          console.log(sold["Model Name"], '::::', carObj[sold["Model Name"]])
         }
-        if (obj.LastPaymentDate === 0) {
-          obj.interest += interestAmount(obj.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
 
-        } else {
-          if (parseInt(obj.Date) > parseInt(obj.LastPaymentDate)) {
-            obj.interest += interestAmount(obj.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
+        if (parseInt(sold["CCP PLUS"]) > 0) {
+          CCPcheck++;
+        }
+        if (sold["Financer REMARK"] == "MSSF") {
+          MSSFcheck++;
+        }
+        if (parseInt(sold["Extended Warranty"]) > 0) {
+          EWPCheck++;
+        }
+        if (sold["Exchange Status"] == 'YES' || sold["Exchange Status"] == 'yes') {
+          ExchangeStatusCheck++;
+        }
+        if (sold["Complaint Status"] == 'YES' || sold["Complaint Status"] == 'yes') {
+          ComplaintCheck++;
+        }
+        if (sold["Autocard"] == 'YES' || sold["Autocard"] == 'yes') {
+          MSRcheck++;
+        }
+        TotalNumberCheck++;
 
-          } else {
-
-
-            if (parseInt(RangeCheck) <= noDueDays) {
-
-
-              // adding if else inside 
-
-              if (RangeCheck == noDueDays) {
-
-                obj.interest += interestAmount(obj.RemainingChallanAmount, daysPastDue - 1 - parseInt(noDueDays))
-                console.log(obj.interest);
-
-
-              } else {
-
-
-                obj.interest += interestAmount(obj.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-                console.log(obj.interest);
-
-              }
-
-              // if (parseInt(obj.Date) + parseInt(noDueDays) >= parseInt(obj.LastPaymentDate)) {
-              //   obj.interest += interestAmount(obj.RemainingChallanAmount, daysPastDue - parseInt(noDueDays));
-
-              // } else {
-              //   obj.interest += interestAmount(obj.RemainingChallanAmount, dueDays);
-
-              // }
-            } else {
-
-              obj.interest += interestAmount(obj.RemainingChallanAmount, dueDays);
-              console.log(obj.interest);
-
-
-            }
+        if (formData.QC.focusModel.includes(sold["Model Name"])) {
+          numberCheck++;
+        }
+        if (formData.QC.autoCard == "yes") {
+          if (sold["Autocard"] == "YES") {
+            autoCardCheck++;
           }
         }
-      }
-    })
-  })
-  return cMap;
-}
-
-
-ipcMain.on("file-selected1", (event, path) => {
-  const workbook1 = XLSX.readFile(path);
-  const sheetName1 = workbook1.SheetNames[0];
-  const sheet1 = workbook1.Sheets[sheetName1];
-  data1 = XLSX.utils.sheet_to_json(sheet1);
-
-
-  data1 = trimValuesArray(data1);
-
-  let Adat1 = data1;
-
-  dat1 = Adat1;
-
-  dat1.forEach(obj => {
-    delete obj.Sno;
-  })
-
-
-  dat1 = transformKeys(dat1);
-  const keysToCheckInChallan = ['Date', 'Customer Code', 'Customer Name', 'Challan No.', 'Total'];
-  const missingKeyForChallanExcel = checkKeys(dat1, keysToCheckInChallan);
-  console.log("missingKeyForChallanExcel")
-  console.log(missingKeyForChallanExcel)
-  if (missingKeyForChallanExcel) {
-    KeyMissing = true;
-    event.reply("formateAlertChallanExcel", missingKeyForChallanExcel);
-  }
-  console.log("data1 after space trim", dat1);
-
-
-});
-
-ipcMain.on("file-selected2", (event, path) => {
-  const workbook2 = XLSX.readFile(path);
-  const sheetName2 = workbook2.SheetNames[0];
-  const sheet2 = workbook2.Sheets[sheetName2];
-  data2 = XLSX.utils.sheet_to_json(sheet2);
-
-  data2 = trimValuesArray(data2);
-
-  data2 = transformKeys(data2);
-
-  let Adat2 = data2;
-
-
-  dat2 = Adat2;
-
-  const keysToCheckInPayment = ['Date', 'Customer Code', 'Customer Name', 'Total Amount'];
-
-  const missingKeyForPamentExcel = checkKeys(dat2, keysToCheckInPayment);
-  console.log("missingKeyForPamentExcel")
-  console.log(missingKeyForPamentExcel)
-  if (missingKeyForPamentExcel) {
-    KeyMissing = true;
-    event.reply("formateAlertPaymentExcel", missingKeyForPamentExcel);
-  }
-
-
-  console.log("Data 2 after trim print", dat2);
-
-  if (!KeyMissing) {
-    const dataForExcel = applyPaymentsAndCalculateInterest(dat1, dat2);
-    // console.log(dataForExcelObj);
-    let ids = Object.keys(dataForExcel);
-    ids.forEach(id => {
-      dataForExcel[id].forEach((row) => {
-        let newObj = {};
-        const parsedDate1 = XLSX.SSF.parse_date_code(row.Date);
-        const jsDate1 = new Date(parsedDate1.y, parsedDate1.m - 1, parsedDate1.d);
-        let jsDate2 = "-";
-        if (row.LastPaymentDate != 0) {
-          const parsedDate2 = XLSX.SSF.parse_date_code(row.LastPaymentDate);
-          jsDate2 = new Date(parsedDate2.y, parsedDate2.m - 1, parsedDate2.d);
+        if (formData.QC.EW == "yes") {
+          if (sold["Extended Warranty"] > 0) {
+            EWCheck++;
+          }
         }
-        newObj = {
-          "Party Id": id,
-          "Challan No": row["Challan No."],
-          "Party Name": row["Customer Name"],
-          "Challan Date": jsDate1,
-          "Total": row["Total"],
-          "Payment Date": jsDate2,
-          "Amount Left": Math.round(row.RemainingChallanAmount),
-          "Interest Amount (13.5% per annum)": Math.round(row.interest),
-        }
-        dataForExcelObj.push(newObj);
       })
-      // console.log("dataForExcelObj::::", JSON.stringify(dataForExcelObj));
-    })
-    // console.log("event")
-  }
 
-});
+      //for EW and auto card check
+      if (numberCheck >= formData.QC.numOfCars) {
+        let EWFlag = true;
+        let autoCardFlag = true;
 
-
-
-ipcMain.on('form-submitted', (event) => {
-  if (!KeyMissing) {
-    event.reply("dataForExcelObj", dataForExcelObj);
-    const nowDate = new Date();
-    const month = nowDate.getMonth() + 1;
-    const date = nowDate.getDate();
-    const year = nowDate.getFullYear();
-    const time = nowDate.toLocaleTimeString().replace(/:/g, '-');
-
-    const newWorkbook = XLSX.utils.book_new();
-    const newSheet = XLSX.utils.json_to_sheet(dataForExcelObj);
-    XLSX.utils.book_append_sheet(newWorkbook, newSheet, "Sheet1");
-    const fileName = `calculatedInterestAmount_${customerIdVal ? `(${customerIdVal})` : ""}_${date}-${month}-${year}_${time}.xlsx`;
-    const folderPath = "./DataSheets";
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath);
-      console.log(`Directory ${folderPath} created.`);
+        //checking autocard from the excel [form ] 
+        if (formData.QC.autoCard === "yes" && (EWCheck >= DSE_NoOfSoldCarExcelDataArr.length))
+          autoCardFlag = true;
+        else {
+          if (formData.QC.autoCard === "yes")
+            autoCardFlag = false;
+        }
+        if (formData.QC.EW === "yes" && (EWCheck >= DSE_NoOfSoldCarExcelDataArr.length))
+          EWFlag = true;
+        else {
+          if (formData.QC.EW === "yes")
+            EWFlag = false;
+        }
+        if (EWFlag && autoCardFlag) {
+          // console.log("sdfghgfcvhjkjhv  :  ", obj);
+          obj = {
+            ...obj,
+            ...carObj,
+            "Status": "OLD",
+            "Focus Model Qualification": "YES",
+            "Discount": Discount,
+            "Exchange Status": ExchangeStatusCheck,
+            "Complaints": ComplaintCheck,
+            "EW Penetration": (EWPCheck / TotalNumberCheck) * 100,
+            "MSR": (MSRcheck / TotalNumberCheck) * 100,
+            "CCP": (CCPcheck / TotalNumberCheck) * 100,
+            "MSSF": (MSSFcheck / TotalNumberCheck) * 100,
+            "Grand Total": TotalNumberCheck
+          }
+          qualifiedRM.push(obj)
+        } else {
+          obj = {
+            ...obj,
+            ...carObj,
+            "Status": "OLD",
+            "Focus Model Qualification": "No",
+            "Discount": Discount,
+            "Exchange Status": ExchangeStatusCheck,
+            "Complaints": ComplaintCheck,
+            "EW Penetration": (EWPCheck / TotalNumberCheck) * 100,
+            "MSR": (MSRcheck / TotalNumberCheck) * 100,
+            "CCP": (CCPcheck / TotalNumberCheck) * 100,
+            "MSSF": (MSSFcheck / TotalNumberCheck) * 100,
+            "Grand Total": TotalNumberCheck
+          }
+          nonQualifiedRM.push(obj)
+        }
+      }
     } else {
-      console.log(`Directory ${folderPath} already exists.`);
-    }
-    XLSX.writeFile(newWorkbook, `./DataSheets/${fileName}`);
+      DSE_NoOfSoldCarExcelDataArr.forEach((sold) => {
+        carObj[sold["Model Name"]]++;
+        TotalNumberCheck++;
 
-    // Clear the data arrays
-    data1 = [];
-    data2 = [];
-    dataForExcelObj = [];
-    dat1 = [];
-    dat2 = [];
-    cMap = [];
-    customerIdVal = '';
+        obj = {
+          ...obj,
+          ...carObj,
+          "Status": "NEW",
+          "Focus Model Qualification": "NO",
+          "Grand Total": TotalNumberCheck
+        }
+
+      })
+      newRm.push(obj)
+
+    }
+
+  })
+  // console.log("qualifiedRM : ", qualifiedRM)
+  // console.log("nonQualifiedRM : ", nonQualifiedRM)
+
+
+}
+
+
+function getIncentiveValue(item, key) {
+  return typeof (item[key]) === 'number' ? item[key] : 0;
+}
+
+ipcMain.on('form-submit', (event, formData) => {
+
+  // console.log("Form Data Input", formData);
+  if (!KeyMissing) {
+    checkQualifingCondition(formData, employeeStatusDataSheet);
+    newDSEIncentiveDataSheet = NewDSEincentiveCalculation(newRm, formData)
+    qualifiedRM = PerCarFunc(qualifiedRM, formData);
+    qualifiedRM = SpecialCarFunc(qualifiedRM, formData);
+    qualifiedRM = PerModelCarFunc(qualifiedRM, formData);//TODO
+    qualifiedRM = CDIfunc(qualifiedRM, CDIdata, formData);//TODO
+    qualifiedRM = EWfunc(qualifiedRM, formData);
+    qualifiedRM = CCPfunc(qualifiedRM, formData);
+    qualifiedRM = MSSFfunc(qualifiedRM, formData);
+    qualifiedRM = MSRFunc(qualifiedRM, formData);
+    qualifiedRM = DiscountFunc(qualifiedRM, formData);
+    qualifiedRM = ExchangeFunc(qualifiedRM, formData);
+    qualifiedRM = ComplaintFunc(qualifiedRM, formData);
+    qualifiedRM = MGAfunc(qualifiedRM, MGAdata, formData);
+    qualifiedRM = SuperCarFunc(qualifiedRM, MGAdata, salesExcelDataSheet, formData)
+    // console.log("final qualifiedRM ::");
+    // console.log(qualifiedRM);
+    let finalExcelobjOldDSE = [];
+
+    qualifiedRM.forEach((item) => {
+
+      // if (item["Super Car Incentive"] === 'NaN') {
+      //   item["Super Car Incentive"] = 0
+      // }
+      const grandTotal =
+        getIncentiveValue(item, "Total PerCar Incentive") +
+        getIncentiveValue(item, "SpecialCar Incentive") +
+        getIncentiveValue(item, "PerModel Incentive") +
+        getIncentiveValue(item, "CDI Incentive") +
+        getIncentiveValue(item, "EW Incentive") +
+        getIncentiveValue(item, "CCP Incentive") +
+        getIncentiveValue(item, "MSSF Incentive") +
+        getIncentiveValue(item, "MSR Incentive") +
+        getIncentiveValue(item, "Discount Incentive") +
+        getIncentiveValue(item, "Exchange Incentive") +
+        getIncentiveValue(item, "Complaint Deduction") +
+        getIncentiveValue(item, "Super Car Incentive") +
+        getIncentiveValue(item, "MGA Incentive");
+
+      obj = {
+        "DSE ID": item['DSE ID'],
+        "DSE Name": item['DSE Name'],
+        "BM AND TL NAME": item['BM AND TL NAME'],
+        "Status": item["Status"],
+        "Focus Model Qualification": item['Focus Model Qualification'],
+        "ALTO": item['ALTO'],
+        "ALTO K-10": item['ALTO K-10'],
+        "S-Presso": item['S-Presso'],
+        "CELERIO": item['CELERIO'],
+        "WagonR": item['WagonR'],
+        "BREZZA": item['BREZZA'],
+        "DZIRE": item['DZIRE'],
+        "EECO": item['EECO'],
+        "Ertiga": item['Ertiga'],
+        "SWIFT": item['SWIFT'],
+        "Grand Total": item["Grand Total"],
+        "Vehicle Incentive ": item["Total PerCar Incentive"],
+        "Special Car Incentive": item['SpecialCar Incentive'],
+        "Total Vehicle Incentive": item["Total PerCar Incentive"] + item['SpecialCar Incentive'],
+        "Super Car Incentive Qualification": getIncentiveValue(item, "Super Car Incentive") ? "YES" : "NO",
+        "Super Car Incentive": getIncentiveValue(item, "Super Car Incentive"),
+        "CDI Score": getIncentiveValue(item, "CDI Score"),//TODO Handle NAN values
+        "CDI Incentive": item["CDI Incentive"],
+        "Extended Warranty Penetration": Math.round(item["EW Penetration"]),
+        "Extended Warranty Incentive": item["EW Incentive"],
+        "CCP Score": Math.round(item["CCP"]),
+        "CCP Incentive": item["CCP Incentive"],
+        "MSSF Score": Math.round(item["MSSF"]),
+        "MSSF Incentive": item["MSSF Incentive"],
+        "MSR Score": Math.round(item["MSR"]),
+        "MSR Incentive": item["MSR Incentive"],
+        "Total Discount": item["Discount"],//TODO Handle value result is not calculating
+        "Discount Incentive": item["Discount Incentive"],
+        "Exchange Incentive": item["Exchange Incentive"],//TODO
+        "Complaint Deduction": item["Complaint Deduction"],//TODO
+        "MGA/Vehicle": Math.round(item["MGA"]),
+        "MGA Incentive": Math.round(item["MGA Incentive"]),
+        "Final Incentive": grandTotal,
+
+      }
+      finalExcelobjOldDSE.push(obj);
+    })
+
+    // finalExcelobjOldDSE = {...nonQualifiedRM,...newDSEIncentiveDataSheet,}
+
+
+    finalExcelobjOldDSE = [...finalExcelobjOldDSE, ...nonQualifiedRM, ...newRm];
+    console.log("finalExcelobjOldDSE", finalExcelobjOldDSE);
+    console.log("nonQualifiedRM", nonQualifiedRM);
+
+
+    event.reply("dataForExcel", finalExcelobjOldDSE);
+    // event.reply("newDSEIncentiveDataSheet", newDSEIncentiveDataSheet);
+    const oldDSE = "oldDSE";
+    // const newDSE = "newDSE";
+    creatExcel(finalExcelobjOldDSE, oldDSE);
+    // creatExcel(newDSEIncentiveDataSheet, newDSE);
+
+    MGAdata = [];
+    CDIdata = [];
+    salesExcelDataSheet = [];
+    employeeStatusDataSheet = [];
+    newDSEIncentiveDataSheet = []
+    qualifiedRM = [];
+    nonQualifiedRM = [];
+    newRm = [];
+    finalExcelobjOldDSE = []
   }
 });
 
+const creatExcel = (dataForExcelObj, text) => {
+  // console.log("text :: ", text);
+  const nowDate = new Date();
+  const month = nowDate.getMonth() + 1;
+  const date = nowDate.getDate();
+  const year = nowDate.getFullYear();
+  const time = nowDate.toLocaleTimeString().replace(/:/g, '-');
 
-ipcMain.on("days", (event, data) => {
-  noDueDays = data;
+  const newWorkbook = XLSX.utils.book_new();
+  const newSheet = XLSX.utils.json_to_sheet(dataForExcelObj);
+  XLSX.utils.book_append_sheet(newWorkbook, newSheet, "Sheet1");
 
-  // console.log("parseInt(noDueDays)::", parseInt(noDueDays))
+  const fileName = `calculatedIncentive_${text}_${date}-${month}-${year}_${time}.xlsx`;
+  const folderPath = "./DataSheets";
+  if (!fs.existsSync(folderPath)) {
+    fs.mkdirSync(folderPath);
+    // console.log(`Directory ${folderPath} created.`);
+  } else {
+    // console.log(`Directory ${folderPath} already exists.`);
+  }
+  XLSX.writeFile(newWorkbook, `./DataSheets/${fileName}`);
+
+}
+
+ipcMain.on('file-selected-salesExcel', (event, path) => {
+
+  //sales datasheet
+  const workbook = XLSX.readFile(path);
+  const salesSheetName = workbook.SheetNames[0];
+  const salesSheet = workbook.Sheets[salesSheetName];
+  let salesSheetData = XLSX.utils.sheet_to_json(salesSheet);
+  salesSheetData = transformKeys(salesSheetData);
+  salesSheetData = trimValuesArray(salesSheetData);
+
+  const keysToCheckInsalesexcel = ["Model Name", "DSE ID", "DSE Name", "BM AND TL NAME", "Insurance", "Extended Warranty", "Autocard", "CCP PLUS", "FINAL DISCOUNT"
+  ];
+
+  const missingKeyForSalesExcel = checkKeys(salesSheetData, keysToCheckInsalesexcel);
+  console.log("missingKeyForSalesExcel")
+  console.log(missingKeyForSalesExcel)
+  if (missingKeyForSalesExcel) {
+    KeyMissing = true;
+    event.reply("formateAlertSalesExcel", missingKeyForSalesExcel);
+  }
+
+  //salesExcel
+  salesSheetData.shift();
+  let groupedData = {};
+  salesSheetData.forEach(row => {
+    const dseId = row['DSE ID'];
+    if (!groupedData[dseId]) {
+      groupedData[dseId] = [];
+    }
+    groupedData[dseId].push(row);
+  });
+  for (const key in groupedData) {
+    if (groupedData.hasOwnProperty(key)) {
+      const obj = {};
+      obj[key] = groupedData[key];
+      salesExcelDataSheet.push(obj);
+    }
+  }
+
+
+
+  //MGA Datasheet
+  const MGAsheetName = workbook.SheetNames[2];
+  const MGAsheet = workbook.Sheets[MGAsheetName];
+  const options = {
+    range: 3
+  };
+  let MGAsheetData = XLSX.utils.sheet_to_json(MGAsheet, options);
+  MGAsheetData = transformKeys(MGAsheetData);
+  MGAsheetData = trimValuesArray(MGAsheetData);
+
+
+  const keysToCheckInMGAexcel = ["DSE NAME", "ID", "MGA/VEH", "TOTAL MGA SALE DDL", "MGA SALE FOR ARGRIMENT"];
+
+  const missingKeyForMGAExcel = checkKeys(MGAsheetData, keysToCheckInMGAexcel);
+  console.log("missingKeyForMGAExcel")
+  console.log(missingKeyForMGAExcel)
+  if (missingKeyForMGAExcel) {
+    KeyMissing = true;
+    event.reply("formateAlertMGAExcel", missingKeyForMGAExcel);
+  }
+
+
+
+  MGAsheetData.forEach((MGArow) => {
+
+    if (MGArow.hasOwnProperty("ID")) {
+      MGAdata.push(MGArow);
+    }
+  })
+
+
+
+
+  //employe Status Sheet
+  const employeeStatusSheetName = workbook.SheetNames[3];
+  const employeeStatusSheet = workbook.Sheets[employeeStatusSheetName];
+  employeeStatusDataSheet = XLSX.utils.sheet_to_json(employeeStatusSheet);
+
+  employeeStatusDataSheet = transformKeys(employeeStatusDataSheet);
+  employeeStatusDataSheet = trimValuesArray(employeeStatusDataSheet);
+
+
+  const keysToCheckInStatusexcel = ["DSE", "STATUS", "DSE ID"];
+
+  const missingKeyForStatusExcel = checkKeys(employeeStatusDataSheet, keysToCheckInStatusexcel);
+  console.log("missingKeyForStatusExcel")
+  console.log(missingKeyForStatusExcel)
+  if (missingKeyForStatusExcel) {
+    KeyMissing = true;
+    event.reply("formateAlertStatusExcel", missingKeyForStatusExcel);
+  }
+
+
+  // console.log("Object inside array employeeStatus", JSON.stringify(employeeStatusDataSheet));
+
+
 });
 
-ipcMain.on("date", (event, data) => {
-  const date = new Date(data);
-  const formattedDate = date;
-  EndDate = formattedDate;
-  // console.log("EndDate::", EndDate);
+ipcMain.on('file-selected-CDIScore', (event, path) => {
+
+  const workbook = XLSX.readFile(path);
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const CDIsheetData = XLSX.utils.sheet_to_json(sheet);
+  CDIdata = CDIsheetData;
+  CDIdata = transformKeys(CDIdata);
+  CDIdata = trimValuesArray(CDIdata);
+  const keysToCheckInCDIexcel = ["DSE ID", "DSE", "CDI"];
+
+  const missingKeyForCDIExcel = checkKeys(CDIdata, keysToCheckInCDIexcel);
+  console.log("missingKeyForCDIExcel")
+  console.log(missingKeyForCDIExcel)
+  if (missingKeyForCDIExcel) {
+    KeyMissing = true;
+    event.reply("formateAlertCDIExcel", missingKeyForCDIExcel);
+  }
+
+
+
+  // console.log("Object inside array CDI Score", CDIdata);
 });
 
-ipcMain.on("percent", (event, data) => {
-  interestPercent = data / 100;
-  // console.log("interestPercent::", interestPercent)
-});
-
-ipcMain.on("customerIdVal", (event, data) => {
-  customerIdVal = data;
-  // console.log("customerIdVal::", customerIdVal);
-});
 
 
 app.whenReady().then(() => {
   createWindow();
-  app.on("activate", () => {
+
+  app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
 });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
     app.quit();
   }
 });

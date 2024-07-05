@@ -1,8 +1,8 @@
 {
-  "name": "nimar-motors",
-  "productName":  "nimar-motors-app",
+  "name": "maruti-app",
+  "productName": "maruti-app",
   "version": "1.0.0",
-  "description": "Nimar Motors Internal Software",
+  "description": "Nimar Motors Incentive Calculation",
   "main": "src/index.js",
   "scripts": {
     "start": "electron-forge start",
@@ -39,12 +39,11 @@
   "keywords": [],
   "author": {
     "name": "IVRM",
-    "email": "IVRM@gmail.com"
-  },
+    "email": "IVRM@gmail.com"  },
   "license": "MIT",
   "dependencies": {
     "electron-squirrel-startup": "^1.0.0",
-    "electronmon": "^2.0.2",
+    "electronmon": "^0.5.1",
     "read-excel-file": "^5.7.1",
     "write-excel-file": "^1.4.30",
     "xlsx": "^0.18.5"

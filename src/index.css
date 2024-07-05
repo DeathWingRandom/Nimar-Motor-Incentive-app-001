@@ -1,149 +1,234 @@
-* {
-  box-sizing: border-box;
-}
+@import url(https://fonts.googleapis.com/css?family=Open+Sans:400,700,600,300,800);
 
-html,
+/* index.css */
+
+/* General Styles */
 body {
   overflow-x: hidden;
-  font-family: "Inter", sans-serif;
-  font-weight: 600;
+  font-family: "Open Sans", sans-serif;
+  font-weight: 300;
   line-height: 1;
   color: #fff;
-  background: #FFFAE6;
-  margin: auto;
+  background: #F4A261;
 }
 
-.container1,
-.container2 {
-  margin: 2px;
+
+.container {
+  width: 65%;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #FFFFFF;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
-input[type="number"],
-input[type="text"],
-input[type="date"] {
-  padding: 10px;
-  margin: 5px 0;
-  box-sizing: border-box;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 16px;
-  font-family: 'Arial', sans-serif;
+h1,
+h2,
+h4 {
+  color: #1F1A17;
+}
 
+h1 {
+  font-size: 2em;
+  margin-bottom: 10px;
+}
+
+h2 {
+  font-size: 1.5em;
+  margin-bottom: 10px;
+}
+
+h4 {
+  font-size: 1.2em;
+  margin-bottom: 10px;
+}
+
+/* File Input Styles */
+.file-input-container {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 20px;
+}
+
+.file-input-container h4 {
+  margin-bottom: 5px;
 }
 
 input[type="file"] {
-  padding: 10px;
-  margin: 5px 0;
-  box-sizing: border-box;
-  border-radius: 4px;
-  font-size: 16px;
-  font-family: 'Arial', sans-serif;
+  border: 1px solid #CCCCCC;
+  padding: 5px;
+  font-size: 1em;
 }
 
-input[type="text"] {
-  width: 30%;
+/* Form Styles */
+form {
+  margin-top: 20px;
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+
 }
 
-
-input[type="number"]:focus,
-input[type="text"]:focus,
-input[type="date"]:focus,
-input[type="file"]:focus {
-  border-color: #b40000;
-  outline: none;
+/* Qualifying Condition Styles */
+.qcContainer {
+  background-color: #EFEFEF;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 2px solid gray;
+  border-radius: 5px;
 }
 
-.vl {
-  border-left: 2px solid black;
-  height: 450px;
-  margin: 55px 0 0 20px;
+#qcInputs {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  margin-bottom: 20px;
 }
 
-.balloon {
-  color: black;
-  width: 45%;
+#carSelection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+#carSelection label {
+  margin-right: 15px;
+}
+
+#qcInputs div {
+  display: flex;
+  justify-content: space-evenly;
+  margin-bottom: 10px;
+}
+
+/* New DSE Section Styles */
+.newDSEContainer {
+  background-color: #EFEFEF;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 2px solid gray;
+  border-radius: 5px;
+}
+
+.newDSE-section {
+  margin-bottom: 10px;
+}
+
+/* Incentive Sections Styles */
+.DSECarIncentive,
+.SuperCar-container {
+  background-color: #EFEFEF;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 5px;
+}
+
+#perModelPairContainer,
+#specialCarPairContainer,
+#Exchange-pairs-container,
+#Complaint-pairs-container {
+  margin: 20px 0;
+  padding: 10px auto;
+  background-color: #EFEFEF;
+  border: 2px solid #989898;
+  border-radius: 5px;
+}
+
+.DSECarIncentive,
+.SuperCar-container,
+.CDI-section,
+.discountIncentive-section,
+.MGA-section,
+.EW-section,
+.MSR-section,
+.ccp-section,
+.MSSF-section,
+.inputFile-section {
+  margin: 20px 0;
+  padding: 15px;
+  background-color: #EFEFEF;
+  border: 2px solid #989898;
+  border-radius: 5px;
+}
+
+.pair-container,
+.perModelPairContainer,
+.specialCarPairContainer,
+.Exchange-pair-container,
+.Complaint-pair-container,
+.SuperCarSelection-container {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  margin-bottom: 10px;
+  background-color: #EFEFEF;
+}
+
+input{
+  color: #3f3f3f;
+}
+
+select,
+input[type="number"] {
+  
+  padding: 5px;
+  font-size: 1em;
+  margin-left: 10px;
+}
+
+input[type="file"] {
+  margin: auto;
+  padding: 5px;
+  font-size: 1em;
+  margin-left: 10px;
 }
 
 button {
-  font-weight: bold;
-  color: #fff;
-  padding: 4px;
-  border-radius: 4px;
-  margin: 0 2px;
+  padding: 10px 20px;
+  background-color: #1F1A17;
+  color: #FFFFFF;
   border: none;
-  background-color: #0e4fae;
-  padding: 10px 30px;
-  margin: 0 10px;
+  cursor: pointer;
+  border-radius: 5px;
+  margin: 10px 0;
 }
 
 button:hover {
-  background-color: rgb(34, 93, 182);
-  box-shadow: 3px 3px 7px rgb(14, 73, 161, 0.3);
+  background-color: #333333;
 }
 
-.list-container ul {
-  font-size: 15px;
-  margin: 0px;
+/* Hidden Class */
+.hidden {
+  display: none;
 }
 
-p {
-  margin: 5px;
-  line-height: 1.5;
-  word-spacing: 4px;
-  
-}
-
-input[type="file"]::file-selector-button {
-  font-weight: bold;
-  color: #fff;
-  padding: 4px;
-  border-radius: 4px;
-  border: none;
-  content: "Select File";
-  background-color: #7f7f7f;
-  padding: 10px 15px;
-
-}
-
-input[type="file"]::file-selector-button:hover {
-  background-color: #595959;
-  box-shadow: 3px 3px 7px rgb(89, 89, 89, 0.3);
+/* Dynamic Inputs Container Styles */
+#cdiInputs,
+#DiscountInputsContainer,
+#MGAinputsContainer,
+#EWinputsContainer,
+#MSRinputsContainer,
+#CCPinputsContainer,
+#MSSFinputsContainer {
+  margin-top: 20px;
 }
 
 label {
-  color: black;
-  font: bold;
+  color: #1F1A17;
 }
 
-@mixin epic-sides() {
-  position: relative;
-  z-index: 1;
-
-  &:before {
-    position: absolute;
-    content: "";
-    display: block;
-    top: 0;
-    left: -5000px;
-    height: 100%;
-    width: 15000px;
-    z-index: -1;
-    @content;
-  }
+select {
+  color: #1F1A17;
 }
 
-li {
-  text-align: left;
-  padding-bottom: 5px;
-}
-
+/* style for table */
 table {
   font-family: arial, sans-serif;
   border-collapse: collapse;
+  overflow-x:auto;
   width: 100%;
   background-color: #fff;
   color: black;
   margin: 10px 2px;
+  display: block;
 }
 
 td,
@@ -173,10 +258,53 @@ td {
   max-width: 200px;
   /* Set max width to prevent cell from growing indefinitely */
 }
+/* 
+<div class="errormsg" id="errormsgSales">
+<h3 class="errorHead" id="errorHeadSales"></h3>
+<ul class="ErrorList" id="salesError"></ul>
+</div> */
 
-ul h3{
-  display: flex;
 
+.errormsg {
+   /* Remove default list style */
+  padding: 10px; /* Add some padding */
+  margin: 10px auto; /* Add some margin between lists */
+  border: 2px solid #f00; /* Red border to highlight error lists */
+  border-radius: 5px; /* Rounded corners */
+  background-color: #ffe6e6; /* Light red background color */
+  display: none;
+  width: 65%;
+  
 }
 
-/* display: flex; */
+.errorHead {
+  font-size: 1em; /* Larger font size for header */
+  color: #d00; /* Dark red color for header text */
+  margin: 0 0 10px 0; /* Margin to separate header from list items */
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+}
+
+ul{
+  list-style-type: none;
+}
+
+ul.ErrorList li {
+  font-size: 1em; /* Standard font size for list items */
+  color: #900; /* Dark red color for error text */
+  margin: 5px 0; /* Margin between list items */
+  padding-left: 20px; /* Indentation for list items */
+  position: relative; /* Position relative to add custom bullet */
+  font-weight: 600;
+}
+
+ul.ErrorList li::before {
+  content: '⚠️'; /* Custom warning icon */
+  color: #d00; /* Dark red color for icon */
+  position: absolute; /* Position icon absolutely */
+  left: 0; /* Align icon to the left */
+  top: 0; /* Align icon to the top */
+  font-size: 1em; /* Font size for icon */
+  margin-right: 10px; /* Space between icon and text */
+}
